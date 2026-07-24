@@ -28,6 +28,20 @@ A CL command that spans multiple physical lines via a trailing `+` (general cont
 
 Single-line CL commands behave exactly like RPGLE/SQL lines (rules 1-3 applied directly).
 
+## Auto-tag mode
+
+For times you want every new line of a file tagged as you go, instead of selecting lines manually each time:
+
+1. Click **iTagger: OFF** in the status bar (bottom right), or run **iTagger: Toggle Auto-Tag for This File** from the Command Palette.
+2. Enter a tag, and optionally a column, same as the manual command.
+3. From then on, every line you finish by pressing Enter gets tagged automatically in that file - until you toggle it off again (click the status bar item, now showing **iTagger: ON (tag)**).
+
+Notes:
+- Scoped per file - turning it on in one file doesn't affect others, and it turns off automatically when the file is closed.
+- For CL/CLLE/CLP, it waits until a `+`/`-` continued statement is fully typed before tagging it as one unit, same as the manual command.
+- Only reacts to pressing Enter - pasting multi-line text doesn't trigger auto-tagging.
+- Blank lines and lines that already carry the current tag are skipped.
+
 ## Settings
 
 | Setting | Default | Description |
@@ -39,3 +53,4 @@ Single-line CL commands behave exactly like RPGLE/SQL lines (rules 1-3 applied d
 
 - Tags are plain text comments; the extension does not validate RPGLE, CL, or SQL syntax.
 - Column counting is based on characters, not visual width — avoid tabs in source lines you plan to tag.
+- Auto-tag state is in-memory only and per-file; it doesn't persist across VS Code restarts or reload-window.

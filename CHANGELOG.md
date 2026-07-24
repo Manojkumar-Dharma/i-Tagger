@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.1.0
+
+- New: **auto-tag mode**, toggled per file via the status bar item (or "iTagger: Toggle Auto-Tag for This File"). Once turned on, every line you finish with Enter is tagged automatically using the tag you entered when turning it on - until you turn it off again for that file. For CL/CLLE/CLP, it correctly waits until a `+`/`-` continued statement is actually complete before tagging it as one unit. State is per-file and in-memory (resets if the file is closed).
+
 ## 0.0.9
 
 - CL statement detection now also follows trailing `-` continuation lines (used to continue a quoted character-string literal), in addition to `+`. A statement can mix both across its lines and is still tagged as one logical unit.

@@ -78,23 +78,7 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 
-		const tag = await vscode.window.showInputBox({
-			prompt: `Enter source tag (max ${MAX_TAG_LENGTH} characters)`,
-			placeHolder: 'Add your tag',
-			validateInput: (value) => {
-				if (!value || value.trim().length === 0) {
-					return 'Tag cannot be empty';
-				}
-				if (value.length > MAX_TAG_LENGTH) {
-					return `Tag must be ${MAX_TAG_LENGTH} characters or fewer`;
-				}
-				if (/\s/.test(value)) {
-					return 'Tag cannot contain spaces';
-				}
-				return null;
-			}
-		});
-
+		const tag = await promptForTag();
 		if (!tag) {
 			return; // user cancelled
 		}
@@ -102,32 +86,191 @@ export function activate(context: vscode.ExtensionContext) {
 		const config = vscode.workspace.getConfiguration('itagger');
 		const maxLineLength = config.get<number>('maxLineLength', DEFAULT_MAX_LINE_LENGTH);
 		const defaultTagColumn = config.get<number>('tagColumn', DEFAULT_TAG_COLUMN);
-
-		// Optional per-run override of the tag column. Leave blank to use the
-		// configured default (itagger.tagColumn).
-		const columnInput = await vscode.window.showInputBox({
-			prompt: `Tag column (optional - press Enter to use default: ${defaultTagColumn})`,
-			placeHolder: `${defaultTagColumn}`,
-			validateInput: (value) => {
-				if (!value || value.trim().length === 0) {
-					return null; // empty is fine - falls back to the default
-				}
-				const n = Number(value);
-				if (!Number.isInteger(n) || n < 1 || n > maxLineLength) {
-					return `Enter a whole number between 1 and ${maxLineLength}`;
-				}
-				return null;
-			}
-		});
-
-		const tagColumn = (columnInput !== undefined && columnInput.trim().length > 0)
-			? Number(columnInput.trim())
-			: defaultTagColumn;
+		const tagColumn = await promptForTagColumn(defaultTagColumn, maxLineLength);
 
 		applyTags(editor, tag, editor.document, maxLineLength, tagColumn);
 	});
-
 	context.subscriptions.push(disposable);
+
+	context.subscriptions.push(...registerAutoTag(context));
+}
+
+async function promptForTag(): Promise<string | undefined> {
+	return vscode.window.showInputBox({
+		prompt: `Enter source tag (max ${MAX_TAG_LENGTH} characters)`,
+		placeHolder: 'Add your tag',
+		validateInput: (value) => {
+			if (!value || value.trim().length === 0) {
+				return 'Tag cannot be empty';
+			}
+			if (value.length > MAX_TAG_LENGTH) {
+				return `Tag must be ${MAX_TAG_LENGTH} characters or fewer`;
+			}
+			if (/\s/.test(value)) {
+				return 'Tag cannot contain spaces';
+			}
+			return null;
+		}
+	});
+}
+
+async function promptForTagColumn(defaultTagColumn: number, maxLineLength: number): Promise<number> {
+	// Optional per-run override of the tag column. Leave blank to use the
+	// configured default (itagger.tagColumn).
+	const columnInput = await vscode.window.showInputBox({
+		prompt: `Tag column (optional - press Enter to use default: ${defaultTagColumn})`,
+		placeHolder: `${defaultTagColumn}`,
+		validateInput: (value) => {
+			if (!value || value.trim().length === 0) {
+				return null; // empty is fine - falls back to the default
+			}
+			const n = Number(value);
+			if (!Number.isInteger(n) || n < 1 || n > maxLineLength) {
+				return `Enter a whole number between 1 and ${maxLineLength}`;
+			}
+			return null;
+		}
+	});
+	return (columnInput !== undefined && columnInput.trim().length > 0)
+		? Number(columnInput.trim())
+		: defaultTagColumn;
+}
+
+// ---------------------------------------------------------------------------
+// Auto-tag mode: once turned on for a file, every line finished with Enter
+// gets tagged automatically (using the tag chosen when turning it on), until
+// turned off for that same file. State is per-document and in-memory only -
+// it resets if the file is closed or the window reloads.
+// ---------------------------------------------------------------------------
+
+interface AutoTagState {
+	tag: string;
+	tagColumn: number;
+	maxLineLength: number;
+}
+
+const autoTagByDocument = new Map<string, AutoTagState>();
+
+function registerAutoTag(context: vscode.ExtensionContext): vscode.Disposable[] {
+	const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+	statusBarItem.command = 'itagger.toggleAutoTag';
+
+	const updateStatusBar = (editor: vscode.TextEditor | undefined) => {
+		if (!editor) {
+			statusBarItem.hide();
+			return;
+		}
+		const key = editor.document.uri.toString();
+		const state = autoTagByDocument.get(key);
+		if (state) {
+			statusBarItem.text = `$(tag) iTagger: ON (${state.tag})`;
+			statusBarItem.tooltip = `Auto-tagging new lines with "${state.tag}" in this file. Click to turn off.`;
+		} else {
+			statusBarItem.text = '$(tag) iTagger: OFF';
+			statusBarItem.tooltip = 'Click to auto-tag every new line in this file until turned off.';
+		}
+		statusBarItem.show();
+	};
+
+	const toggleCommand = vscode.commands.registerCommand('itagger.toggleAutoTag', async () => {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) {
+			return;
+		}
+		const key = editor.document.uri.toString();
+
+		if (autoTagByDocument.has(key)) {
+			autoTagByDocument.delete(key);
+			vscode.window.showInformationMessage('iTagger: auto-tag turned off for this file.');
+			updateStatusBar(editor);
+			return;
+		}
+
+		const tag = await promptForTag();
+		if (!tag) {
+			return; // user cancelled - stay off
+		}
+		const config = vscode.workspace.getConfiguration('itagger');
+		const maxLineLength = config.get<number>('maxLineLength', DEFAULT_MAX_LINE_LENGTH);
+		const defaultTagColumn = config.get<number>('tagColumn', DEFAULT_TAG_COLUMN);
+		const tagColumn = await promptForTagColumn(defaultTagColumn, maxLineLength);
+
+		autoTagByDocument.set(key, { tag, tagColumn, maxLineLength });
+		vscode.window.showInformationMessage(`iTagger: auto-tagging new lines with "${tag}" until you turn it off.`);
+		updateStatusBar(editor);
+	});
+
+	const changeListener = vscode.workspace.onDidChangeTextDocument(event => {
+		const document = event.document;
+		const state = autoTagByDocument.get(document.uri.toString());
+		if (!state) {
+			return;
+		}
+
+		const eol = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
+
+		for (const change of event.contentChanges) {
+			// Only react to a plain Enter keypress: a pure insertion whose text
+			// is exactly the line-ending sequence. This deliberately excludes
+			// our own tag-insertion edits (which always include the tag text,
+			// not a bare newline) and multi-line pastes (out of scope for now).
+			if (!change.range.isEmpty || change.text !== eol) {
+				continue;
+			}
+
+			const completedLine = change.range.start.line;
+			if (completedLine >= document.lineCount) {
+				continue;
+			}
+			autoTagLine(document, completedLine, state, eol);
+		}
+	});
+
+	const closeListener = vscode.workspace.onDidCloseTextDocument(document => {
+		autoTagByDocument.delete(document.uri.toString());
+	});
+
+	const activeEditorListener = vscode.window.onDidChangeActiveTextEditor(updateStatusBar);
+	updateStatusBar(vscode.window.activeTextEditor);
+
+	return [statusBarItem, toggleCommand, changeListener, closeListener, activeEditorListener];
+}
+
+function autoTagLine(document: vscode.TextDocument, completedLine: number, state: AutoTagState, eol: string) {
+	const editor = vscode.window.visibleTextEditors.find(e => e.document === document);
+	if (!editor) {
+		return;
+	}
+
+	const tagText = buildTagText(state.tag, document);
+	const lineText = document.lineAt(completedLine).text;
+	const trimmed = lineText.replace(/\s+$/, '');
+
+	if (trimmed.length === 0 || trimmed.endsWith(tagText)) {
+		return; // nothing to tag, or already tagged (avoid double-tagging)
+	}
+
+	const colIndex = state.tagColumn - 1;
+
+	if (isClSource(document)) {
+		if (continuesToNextLine(document, completedLine)) {
+			return; // statement isn't finished yet - wait for the closing line
+		}
+		const range = findClStatementRange(document, completedLine);
+		// If the statement's last line already carries this tag, skip.
+		const lastLineTrimmed = document.lineAt(range.end).text.replace(/\s+$/, '');
+		if (lastLineTrimmed.endsWith(tagText)) {
+			return;
+		}
+		editor.edit(editBuilder => {
+			tagReferenceLine(editBuilder, document, range.end, range.start, range.end, state.tag, tagText, state.maxLineLength, colIndex, eol);
+		});
+		return;
+	}
+
+	editor.edit(editBuilder => {
+		tagReferenceLine(editBuilder, document, completedLine, completedLine, completedLine, state.tag, tagText, state.maxLineLength, colIndex, eol);
+	});
 }
 
 /**

@@ -2,7 +2,7 @@
   "name": "itagger",
   "displayName": "iTagger",
   "description": "Add a source modification tag to selected lines in RPGLE, CLP/CLLE, and SQL source files at a fixed column, using the right comment style for each (//, /* */, --).",
-  "version": "0.0.9",
+  "version": "0.1.0",
   "publisher": "Manojkumar-IBMi",
   "icon": "icon.png",
   "license": "MIT",
@@ -16,13 +16,19 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "itagger.addTag",
         "title": "iTagger: Add Source Tag"
+      },
+      {
+        "command": "itagger.toggleAutoTag",
+        "title": "iTagger: Toggle Auto-Tag for This File"
       }
     ],
     "menus": {
@@ -30,6 +36,10 @@
         {
           "when": "editorHasSelection",
           "command": "itagger.addTag",
+          "group": "9_cutcopypaste"
+        },
+        {
+          "command": "itagger.toggleAutoTag",
           "group": "9_cutcopypaste"
         }
       ]
