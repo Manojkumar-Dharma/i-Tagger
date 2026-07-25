@@ -66,7 +66,21 @@ function findClStatementRange(document: vscode.TextDocument, lineNum: number): {
 	return { start, end };
 }
 
+const LAST_TAG_KEY = 'itagger.lastTag';
+
+let workspaceState: vscode.Memento;
+
+function getLastTag(): string | undefined {
+	return workspaceState?.get<string>(LAST_TAG_KEY);
+}
+
+function saveLastTag(tag: string): void {
+	workspaceState?.update(LAST_TAG_KEY, tag);
+}
+
 export function activate(context: vscode.ExtensionContext) {
+	workspaceState = context.workspaceState;
+
 	const disposable = vscode.commands.registerCommand('itagger.addTag', async () => {
 		const editor = vscode.window.activeTextEditor;
 		if (!editor) {
@@ -82,6 +96,7 @@ export function activate(context: vscode.ExtensionContext) {
 		if (!tag) {
 			return; // user cancelled
 		}
+		saveLastTag(tag);
 
 		const config = vscode.workspace.getConfiguration('itagger');
 		const maxLineLength = config.get<number>('maxLineLength', DEFAULT_MAX_LINE_LENGTH);
@@ -96,9 +111,12 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 async function promptForTag(): Promise<string | undefined> {
+	const lastTag = getLastTag();
 	return vscode.window.showInputBox({
 		prompt: `Enter source tag (max ${MAX_TAG_LENGTH} characters)`,
 		placeHolder: 'Add your tag',
+		value: lastTag,
+		valueSelection: lastTag ? [0, lastTag.length] : undefined,
 		validateInput: (value) => {
 			if (!value || value.trim().length === 0) {
 				return 'Tag cannot be empty';
@@ -151,6 +169,31 @@ interface AutoTagState {
 
 const autoTagByDocument = new Map<string, AutoTagState>();
 
+// Auto-tag settings persisted per file so they survive closing/reopening a
+// file or reloading the window - but restoring them always asks for
+// confirmation first (see maybeOfferRestore) rather than silently turning
+// back on, since picking up an old tag without the person noticing could tag
+// lines they didn't mean to.
+const AUTO_TAG_PERSIST_KEY = 'itagger.autoTagPersisted';
+
+function getPersistedAutoTag(): Record<string, AutoTagState> {
+	return workspaceState?.get<Record<string, AutoTagState>>(AUTO_TAG_PERSIST_KEY) ?? {};
+}
+
+function setPersistedAutoTag(key: string, state: AutoTagState): void {
+	const all = getPersistedAutoTag();
+	all[key] = state;
+	workspaceState?.update(AUTO_TAG_PERSIST_KEY, all);
+}
+
+function removePersistedAutoTag(key: string): void {
+	const all = getPersistedAutoTag();
+	if (key in all) {
+		delete all[key];
+		workspaceState?.update(AUTO_TAG_PERSIST_KEY, all);
+	}
+}
+
 // Document URIs currently being edited programmatically by this extension
 // (either the manual command or auto-tag itself). The change listener skips
 // these so it never mistakes our own tag-insertion edits for user typing or
@@ -189,6 +232,40 @@ function registerAutoTag(context: vscode.ExtensionContext): vscode.Disposable[] 
 		statusBarItem.show();
 	};
 
+	// Tracks which documents we've already asked about restoring auto-tag
+	// this session, so switching back to the same tab doesn't ask again.
+	const askedThisSession = new Set<string>();
+
+	const maybeOfferRestore = (editor: vscode.TextEditor | undefined) => {
+		if (!editor) {
+			return;
+		}
+		const key = editor.document.uri.toString();
+		if (autoTagByDocument.has(key) || askedThisSession.has(key)) {
+			return;
+		}
+		const persisted = getPersistedAutoTag()[key];
+		if (!persisted) {
+			return;
+		}
+		askedThisSession.add(key);
+
+		vscode.window.showInformationMessage(
+			`iTagger: this file previously had auto-tag ON with tag "${persisted.tag}". Turn it back on?`,
+			'Turn On',
+			"Don't Ask Again"
+		).then(choice => {
+			if (choice === 'Turn On') {
+				autoTagByDocument.set(key, persisted);
+				vscode.window.showInformationMessage(`iTagger: auto-tagging new lines with "${persisted.tag}" until you turn it off.`);
+				updateStatusBar(vscode.window.activeTextEditor);
+			} else if (choice === "Don't Ask Again") {
+				removePersistedAutoTag(key);
+			}
+			// Dismissed without a choice: leave it persisted, ask again next time.
+		});
+	};
+
 	const toggleCommand = vscode.commands.registerCommand('itagger.toggleAutoTag', async () => {
 		const editor = vscode.window.activeTextEditor;
 		if (!editor) {
@@ -198,6 +275,7 @@ function registerAutoTag(context: vscode.ExtensionContext): vscode.Disposable[] 
 
 		if (autoTagByDocument.has(key)) {
 			autoTagByDocument.delete(key);
+			removePersistedAutoTag(key);
 			vscode.window.showInformationMessage('iTagger: auto-tag turned off for this file.');
 			updateStatusBar(editor);
 			return;
@@ -207,12 +285,16 @@ function registerAutoTag(context: vscode.ExtensionContext): vscode.Disposable[] 
 		if (!tag) {
 			return; // user cancelled - stay off
 		}
+		saveLastTag(tag);
 		const config = vscode.workspace.getConfiguration('itagger');
 		const maxLineLength = config.get<number>('maxLineLength', DEFAULT_MAX_LINE_LENGTH);
 		const defaultTagColumn = config.get<number>('tagColumn', DEFAULT_TAG_COLUMN);
 		const tagColumn = await promptForTagColumn(defaultTagColumn, maxLineLength);
 
-		autoTagByDocument.set(key, { tag, tagColumn, maxLineLength });
+		const state: AutoTagState = { tag, tagColumn, maxLineLength };
+		autoTagByDocument.set(key, state);
+		setPersistedAutoTag(key, state);
+		askedThisSession.add(key); // no need to offer-restore what's already on
 		vscode.window.showInformationMessage(`iTagger: auto-tagging new lines with "${tag}" until you turn it off.`);
 		updateStatusBar(editor);
 	});
@@ -252,12 +334,22 @@ function registerAutoTag(context: vscode.ExtensionContext): vscode.Disposable[] 
 
 	const closeListener = vscode.workspace.onDidCloseTextDocument(document => {
 		autoTagByDocument.delete(document.uri.toString());
+		askedThisSession.delete(document.uri.toString());
 	});
 
-	const activeEditorListener = vscode.window.onDidChangeActiveTextEditor(updateStatusBar);
-	updateStatusBar(vscode.window.activeTextEditor);
+	const activeEditorListener = vscode.window.onDidChangeActiveTextEditor(editor => {
+		updateStatusBar(editor);
+		maybeOfferRestore(editor);
+	});
+	const openListener = vscode.workspace.onDidOpenTextDocument(document => {
+		const editor = vscode.window.visibleTextEditors.find(e => e.document === document);
+		maybeOfferRestore(editor);
+	});
 
-	return [statusBarItem, toggleCommand, changeListener, closeListener, activeEditorListener];
+	updateStatusBar(vscode.window.activeTextEditor);
+	maybeOfferRestore(vscode.window.activeTextEditor);
+
+	return [statusBarItem, toggleCommand, changeListener, closeListener, activeEditorListener, openListener];
 }
 
 function autoTagLines(document: vscode.TextDocument, completedLines: number[], state: AutoTagState, eol: string, key: string) {

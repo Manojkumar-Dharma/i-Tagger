@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.2.0
+
+- The tag prompt now pre-fills with your last-used tag (remembered per workspace/project), so repeat tagging under the same change number is one less keystroke - selected so typing immediately replaces it.
+- Auto-tag settings now persist per file, per workspace. Reopening a file (or reloading the window) that previously had auto-tag on shows a prompt asking whether to turn it back on - it never restores silently.
+
 ## 0.1.1
 
 - Auto-tag mode now handles pasting multi-line text, not just pressing Enter: every line finalized by a newline in the pasted content gets tagged, including a pasted CL statement that spans multiple `+`/`-` continued lines (tagged once, as a whole statement, same as typing it out).

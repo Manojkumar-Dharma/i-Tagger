@@ -42,6 +42,11 @@ Notes:
 - Reacts to both pressing Enter and pasting multi-line text - any line finalized by a newline gets tagged.
 - The manual **iTagger: Add Source Tag** command (select lines, run it) works exactly the same whether auto-tag is on or off for that file - they're independent, and never interfere with each other's edits.
 - Blank lines and lines that already carry the current tag are skipped.
+- Settings are remembered per file, per workspace. Reopening a file (or reloading the window) that previously had auto-tag on will ask - via a notification - whether to turn it back on; it never restores silently.
+
+## Remembered tag
+
+The tag prompt (manual command and auto-tag) pre-fills with whatever tag you last used, remembered separately per workspace/project. Just press Enter to reuse it, or type over it for a new one.
 
 ## Settings
 
@@ -54,4 +59,3 @@ Notes:
 
 - Tags are plain text comments; the extension does not validate RPGLE, CL, or SQL syntax.
 - Column counting is based on characters, not visual width — avoid tabs in source lines you plan to tag.
-- Auto-tag state is in-memory only and per-file; it doesn't persist across VS Code restarts or reload-window.
