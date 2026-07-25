@@ -28,21 +28,24 @@ A CL command that spans multiple physical lines via a trailing `+` (general cont
 
 Single-line CL commands behave exactly like RPGLE/SQL lines (rules 1-3 applied directly).
 
-## Auto-tag mode
+## Automatic tagging
 
-For times you want every new line of a file tagged as you go, instead of selecting lines manually each time:
+For times you want lines tagged as you go, instead of selecting them manually each time, iTagger offers two modes:
 
 1. Click **iTagger: OFF** in the status bar (bottom right), or run **iTagger: Toggle Auto-Tag for This File** from the Command Palette.
-2. Enter a tag, and optionally a column, same as the manual command.
-3. From then on, every line you finish by pressing Enter gets tagged automatically in that file - until you toggle it off again (click the status bar item, now showing **iTagger: ON (tag)**).
+2. Pick a mode:
+   - **Auto-tag on Enter / paste** - tags each line the moment you finish it (pressing Enter, or a multi-line paste).
+   - **Tag on save** - leaves lines alone while you edit, and tags whatever changed since the last save, right before the file is saved.
+3. Enter a tag, and optionally a column, same as the manual command.
+4. From then on, tagging happens automatically per the mode you picked - until you toggle it off again (click the status bar item, now showing e.g. **iTagger: ON (0084) \[Enter\]** or **\[Save\]**).
 
 Notes:
 - Scoped per file - turning it on in one file doesn't affect others, and it turns off automatically when the file is closed.
-- For CL/CLLE/CLP, it waits until a `+`/`-` continued statement is fully typed before tagging it as one unit, same as the manual command.
-- Reacts to both pressing Enter and pasting multi-line text - any line finalized by a newline gets tagged.
-- The manual **iTagger: Add Source Tag** command (select lines, run it) works exactly the same whether auto-tag is on or off for that file - they're independent, and never interfere with each other's edits.
+- For CL/CLLE/CLP, both modes wait until a `+`/`-` continued statement is fully complete before tagging it as one unit, same as the manual command.
+- **Tag on save** detects changes by comparing file content, not by tracking individual edits - so it stays correct even after several edits, insertions, or deletions between saves.
+- The manual **iTagger: Add Source Tag** command (select lines, run it) works exactly the same whether automatic tagging is on or off for that file - they're independent, and never interfere with each other's edits.
 - Blank lines and lines that already carry the current tag are skipped.
-- Settings are remembered per file, per workspace. Reopening a file (or reloading the window) that previously had auto-tag on will ask - via a notification - whether to turn it back on; it never restores silently.
+- Settings (including which mode) are remembered per file, per workspace. Reopening a file (or reloading the window) that previously had tagging on will ask - via a notification - whether to turn it back on; it never restores silently.
 
 ## Remembered tag
 

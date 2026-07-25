@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.3.0
+
+- New: **tag on save** mode, alongside the existing auto-tag-on-Enter mode. Turning tagging on for a file now asks which mode to use: tag every line as you finish it (Enter/paste), or tag whatever changed since the last save, right before saving. Change detection for save mode compares file content directly (not incremental line tracking), so it stays correct even after multiple edits, insertions, or deletions between saves.
+- Status bar now shows which mode is active, e.g. `iTagger: ON (0084) [Save]`.
+- Persistence and the confirm-before-restore prompt on reopen now remember which mode was in use, not just the tag.
+
 ## 0.2.0
 
 - The tag prompt now pre-fills with your last-used tag (remembered per workspace/project), so repeat tagging under the same change number is one less keystroke - selected so typing immediately replaces it.
