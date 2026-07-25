@@ -151,6 +151,23 @@ interface AutoTagState {
 
 const autoTagByDocument = new Map<string, AutoTagState>();
 
+// Document URIs currently being edited programmatically by this extension
+// (either the manual command or auto-tag itself). The change listener skips
+// these so it never mistakes our own tag-insertion edits for user typing or
+// pasting - which matters now that paste detection also looks for inserted
+// newlines, since case-3 tag-sandwiching inserts newlines too.
+const programmaticEditInProgress = new Set<string>();
+
+async function runProgrammaticEdit(editor: vscode.TextEditor, run: (editBuilder: vscode.TextEditorEdit) => void): Promise<void> {
+	const key = editor.document.uri.toString();
+	programmaticEditInProgress.add(key);
+	try {
+		await editor.edit(run);
+	} finally {
+		programmaticEditInProgress.delete(key);
+	}
+}
+
 function registerAutoTag(context: vscode.ExtensionContext): vscode.Disposable[] {
 	const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
 	statusBarItem.command = 'itagger.toggleAutoTag';
@@ -202,27 +219,34 @@ function registerAutoTag(context: vscode.ExtensionContext): vscode.Disposable[] 
 
 	const changeListener = vscode.workspace.onDidChangeTextDocument(event => {
 		const document = event.document;
-		const state = autoTagByDocument.get(document.uri.toString());
-		if (!state) {
-			return;
+		const key = document.uri.toString();
+		const state = autoTagByDocument.get(key);
+		if (!state || programmaticEditInProgress.has(key)) {
+			return; // no auto-tag here, or this change is our own edit - ignore it
 		}
 
 		const eol = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
 
+		// A line counts as "completed" when a newline was just inserted right
+		// after it - whether that's a single Enter keypress or a multi-line
+		// paste. change.text.split on any newline gives one fragment per
+		// resulting line; every fragment boundary except the last one marks a
+		// newly completed line (the last fragment is still being edited, same
+		// as the fresh empty line after a plain Enter, so it's left alone).
+		const completedLines = new Set<number>();
 		for (const change of event.contentChanges) {
-			// Only react to a plain Enter keypress: a pure insertion whose text
-			// is exactly the line-ending sequence. This deliberately excludes
-			// our own tag-insertion edits (which always include the tag text,
-			// not a bare newline) and multi-line pastes (out of scope for now).
-			if (!change.range.isEmpty || change.text !== eol) {
-				continue;
+			const fragments = change.text.split(/\r\n|\r|\n/);
+			const newlineCount = fragments.length - 1;
+			for (let i = 0; i < newlineCount; i++) {
+				const lineNum = change.range.start.line + i;
+				if (lineNum < document.lineCount) {
+					completedLines.add(lineNum);
+				}
 			}
+		}
 
-			const completedLine = change.range.start.line;
-			if (completedLine >= document.lineCount) {
-				continue;
-			}
-			autoTagLine(document, completedLine, state, eol);
+		if (completedLines.size > 0) {
+			autoTagLines(document, Array.from(completedLines).sort((a, b) => a - b), state, eol, key);
 		}
 	});
 
@@ -236,40 +260,49 @@ function registerAutoTag(context: vscode.ExtensionContext): vscode.Disposable[] 
 	return [statusBarItem, toggleCommand, changeListener, closeListener, activeEditorListener];
 }
 
-function autoTagLine(document: vscode.TextDocument, completedLine: number, state: AutoTagState, eol: string) {
+function autoTagLines(document: vscode.TextDocument, completedLines: number[], state: AutoTagState, eol: string, key: string) {
 	const editor = vscode.window.visibleTextEditors.find(e => e.document === document);
 	if (!editor) {
 		return;
 	}
 
 	const tagText = buildTagText(state.tag, document);
-	const lineText = document.lineAt(completedLine).text;
-	const trimmed = lineText.replace(/\s+$/, '');
-
-	if (trimmed.length === 0 || trimmed.endsWith(tagText)) {
-		return; // nothing to tag, or already tagged (avoid double-tagging)
-	}
-
 	const colIndex = state.tagColumn - 1;
 
-	if (isClSource(document)) {
-		if (continuesToNextLine(document, completedLine)) {
-			return; // statement isn't finished yet - wait for the closing line
+	// Resolve each candidate line to its actual tagging target: for CL, a
+	// completed line that's still mid-continuation defers to whichever later
+	// line finally completes the statement, and every line belonging to the
+	// same statement collapses to a single target (dedupe by statement end).
+	const targets = new Map<number, { start: number; end: number }>();
+	for (const lineNum of completedLines) {
+		const lineText = document.lineAt(lineNum).text.replace(/\s+$/, '');
+		if (lineText.length === 0) {
+			continue; // blank line - nothing to tag
 		}
-		const range = findClStatementRange(document, completedLine);
-		// If the statement's last line already carries this tag, skip.
-		const lastLineTrimmed = document.lineAt(range.end).text.replace(/\s+$/, '');
-		if (lastLineTrimmed.endsWith(tagText)) {
-			return;
+
+		if (isClSource(document)) {
+			if (continuesToNextLine(document, lineNum)) {
+				continue; // statement isn't finished yet
+			}
+			const range = findClStatementRange(document, lineNum);
+			targets.set(range.end, range);
+		} else {
+			targets.set(lineNum, { start: lineNum, end: lineNum });
 		}
-		editor.edit(editBuilder => {
-			tagReferenceLine(editBuilder, document, range.end, range.start, range.end, state.tag, tagText, state.maxLineLength, colIndex, eol);
-		});
+	}
+
+	if (targets.size === 0) {
 		return;
 	}
 
-	editor.edit(editBuilder => {
-		tagReferenceLine(editBuilder, document, completedLine, completedLine, completedLine, state.tag, tagText, state.maxLineLength, colIndex, eol);
+	runProgrammaticEdit(editor, editBuilder => {
+		for (const range of targets.values()) {
+			const lastLineTrimmed = document.lineAt(range.end).text.replace(/\s+$/, '');
+			if (lastLineTrimmed.endsWith(tagText)) {
+				continue; // already tagged - avoid double-tagging
+			}
+			tagReferenceLine(editBuilder, document, range.end, range.start, range.end, state.tag, tagText, state.maxLineLength, colIndex, eol);
+		}
 	});
 }
 
@@ -358,7 +391,7 @@ function applyTags(editor: vscode.TextEditor, tag: string, document: vscode.Text
 		}
 		const statements = Array.from(statementsByStart.values()).sort((a, b) => b.start - a.start);
 
-		editor.edit(editBuilder => {
+		runProgrammaticEdit(editor, editBuilder => {
 			for (const stmt of statements) {
 				tagReferenceLine(editBuilder, document, stmt.end, stmt.start, stmt.end, tag, tagText, maxLineLength, colIndex, eol);
 			}
@@ -369,7 +402,7 @@ function applyTags(editor: vscode.TextEditor, tag: string, document: vscode.Text
 	// RPGLE, SQL, and everything else: tag every selected line individually.
 	const sortedDesc = Array.from(touchedLines).sort((a, b) => b - a);
 
-	editor.edit(editBuilder => {
+	runProgrammaticEdit(editor, editBuilder => {
 		for (const lineNum of sortedDesc) {
 			tagReferenceLine(editBuilder, document, lineNum, lineNum, lineNum, tag, tagText, maxLineLength, colIndex, eol);
 		}

@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.1.1
+
+- Auto-tag mode now handles pasting multi-line text, not just pressing Enter: every line finalized by a newline in the pasted content gets tagged, including a pasted CL statement that spans multiple `+`/`-` continued lines (tagged once, as a whole statement, same as typing it out).
+- Added a re-entrancy guard shared between the manual command and auto-tag mode, so the two never mistake each other's edits (or their own) for new user input - this matters now that paste detection also looks for inserted newlines, which the case-3 tag-sandwiching edit also produces.
+- SQL tagging (`-- tag`) confirmed working in auto-tag mode (Enter and paste), not just the manual command - it already shared the same comment-style logic, this was a verification pass rather than a code change.
+
 ## 0.1.0
 
 - New: **auto-tag mode**, toggled per file via the status bar item (or "iTagger: Toggle Auto-Tag for This File"). Once turned on, every line you finish with Enter is tagged automatically using the tag you entered when turning it on - until you turn it off again for that file. For CL/CLLE/CLP, it correctly waits until a `+`/`-` continued statement is actually complete before tagging it as one unit. State is per-file and in-memory (resets if the file is closed).

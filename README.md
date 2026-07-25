@@ -39,7 +39,8 @@ For times you want every new line of a file tagged as you go, instead of selecti
 Notes:
 - Scoped per file - turning it on in one file doesn't affect others, and it turns off automatically when the file is closed.
 - For CL/CLLE/CLP, it waits until a `+`/`-` continued statement is fully typed before tagging it as one unit, same as the manual command.
-- Only reacts to pressing Enter - pasting multi-line text doesn't trigger auto-tagging.
+- Reacts to both pressing Enter and pasting multi-line text - any line finalized by a newline gets tagged.
+- The manual **iTagger: Add Source Tag** command (select lines, run it) works exactly the same whether auto-tag is on or off for that file - they're independent, and never interfere with each other's edits.
 - Blank lines and lines that already carry the current tag are skipped.
 
 ## Settings
