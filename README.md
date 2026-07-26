@@ -37,7 +37,7 @@ For times you want lines tagged as you go, instead of selecting them manually ea
    - **Auto-tag on Enter / paste** - tags each line the moment you finish it (pressing Enter, or a multi-line paste).
    - **Tag on save** - leaves lines alone while you edit, and tags whatever changed since the last save, right before the file is saved.
 3. Enter a tag, and optionally a column, same as the manual command.
-4. From then on, tagging happens automatically per the mode you picked - until you toggle it off again (click the status bar item, now showing e.g. **iTagger: ON (0084) \[Enter\]** or **\[Save\]**).
+4. From then on, tagging happens automatically per the mode you picked - until you toggle it off again (click the status bar item, now showing e.g. **iTagger: ON (0001) \[Enter\]** or **\[Save\]**).
 
 Notes:
 - Scoped per file - turning it on in one file doesn't affect others, and it turns off automatically when the file is closed.
