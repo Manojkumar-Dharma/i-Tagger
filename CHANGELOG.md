@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.3.1
+
+- Diagnostic build: any error while applying a tag (auto-tag on Enter/paste, or tag on save) now shows as a visible error notification instead of silently disappearing as an unhandled promise rejection. If auto-tag isn't tagging lines even though the status bar shows ON, this should reveal why.
+
 ## 0.3.0
 
 - New: **tag on save** mode, alongside the existing auto-tag-on-Enter mode. Turning tagging on for a file now asks which mode to use: tag every line as you finish it (Enter/paste), or tag whatever changed since the last save, right before saving. Change detection for save mode compares file content directly (not incremental line tracking), so it stays correct even after multiple edits, insertions, or deletions between saves.

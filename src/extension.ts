@@ -212,7 +212,12 @@ async function runProgrammaticEdit(editor: vscode.TextEditor, run: (editBuilder:
 	const key = editor.document.uri.toString();
 	programmaticEditInProgress.add(key);
 	try {
-		await editor.edit(run);
+		const applied = await editor.edit(run);
+		if (!applied) {
+			vscode.window.showWarningMessage('iTagger: the edit was not applied (editor may have changed). Try again.');
+		}
+	} catch (err) {
+		vscode.window.showErrorMessage(`iTagger: failed to apply tag - ${err instanceof Error ? err.message : String(err)}`);
 	} finally {
 		programmaticEditInProgress.delete(key);
 	}
@@ -425,62 +430,70 @@ function registerAutoTag(context: vscode.ExtensionContext): vscode.Disposable[] 
 	});
 
 	const changeListener = vscode.workspace.onDidChangeTextDocument(event => {
-		const document = event.document;
-		const key = document.uri.toString();
-		const state = tagModeByDocument.get(key);
-		if (!state || state.mode !== 'onEnter' || programmaticEditInProgress.has(key)) {
-			return; // no onEnter tagging here, or this change is our own edit - ignore it
-		}
+		try {
+			const document = event.document;
+			const key = document.uri.toString();
+			const state = tagModeByDocument.get(key);
+			if (!state || state.mode !== 'onEnter' || programmaticEditInProgress.has(key)) {
+				return; // no onEnter tagging here, or this change is our own edit - ignore it
+			}
 
-		const eol = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
+			const eol = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
 
-		// A line counts as "completed" when a newline was just inserted right
-		// after it - whether that's a single Enter keypress or a multi-line
-		// paste. change.text.split on any newline gives one fragment per
-		// resulting line; every fragment boundary except the last one marks a
-		// newly completed line (the last fragment is still being edited, same
-		// as the fresh empty line after a plain Enter, so it's left alone).
-		const completedLines = new Set<number>();
-		for (const change of event.contentChanges) {
-			const fragments = change.text.split(/\r\n|\r|\n/);
-			const newlineCount = fragments.length - 1;
-			for (let i = 0; i < newlineCount; i++) {
-				const lineNum = change.range.start.line + i;
-				if (lineNum < document.lineCount) {
-					completedLines.add(lineNum);
+			// A line counts as "completed" when a newline was just inserted right
+			// after it - whether that's a single Enter keypress or a multi-line
+			// paste. change.text.split on any newline gives one fragment per
+			// resulting line; every fragment boundary except the last one marks a
+			// newly completed line (the last fragment is still being edited, same
+			// as the fresh empty line after a plain Enter, so it's left alone).
+			const completedLines = new Set<number>();
+			for (const change of event.contentChanges) {
+				const fragments = change.text.split(/\r\n|\r|\n/);
+				const newlineCount = fragments.length - 1;
+				for (let i = 0; i < newlineCount; i++) {
+					const lineNum = change.range.start.line + i;
+					if (lineNum < document.lineCount) {
+						completedLines.add(lineNum);
+					}
 				}
 			}
-		}
 
-		if (completedLines.size > 0) {
-			autoTagLines(document, Array.from(completedLines).sort((a, b) => a - b), state, eol);
+			if (completedLines.size > 0) {
+				autoTagLines(document, Array.from(completedLines).sort((a, b) => a - b), state, eol);
+			}
+		} catch (err) {
+			vscode.window.showErrorMessage(`iTagger: auto-tag error - ${err instanceof Error ? err.message : String(err)}`);
 		}
 	});
 
 	const willSaveListener = vscode.workspace.onWillSaveTextDocument(event => {
-		const document = event.document;
-		const key = document.uri.toString();
-		const state = tagModeByDocument.get(key);
-		if (!state || state.mode !== 'onSave') {
-			return;
-		}
+		try {
+			const document = event.document;
+			const key = document.uri.toString();
+			const state = tagModeByDocument.get(key);
+			if (!state || state.mode !== 'onSave') {
+				return;
+			}
 
-		const oldLines = saveModeSnapshots.get(key) ?? docLines(document);
-		const newLines = docLines(document);
-		const changedLines = changedLineRange(oldLines, newLines);
-		if (changedLines.length === 0) {
-			return;
-		}
+			const oldLines = saveModeSnapshots.get(key) ?? docLines(document);
+			const newLines = docLines(document);
+			const changedLines = changedLineRange(oldLines, newLines);
+			if (changedLines.length === 0) {
+				return;
+			}
 
-		const targets = resolveTagTargets(document, changedLines);
-		if (targets.size === 0) {
-			return;
-		}
+			const targets = resolveTagTargets(document, changedLines);
+			if (targets.size === 0) {
+				return;
+			}
 
-		const eol = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
-		const collector = new TextEditCollector();
-		buildTagTextEdits(collector, document, targets, state, eol);
-		event.waitUntil(Promise.resolve(collector.edits));
+			const eol = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
+			const collector = new TextEditCollector();
+			buildTagTextEdits(collector, document, targets, state, eol);
+			event.waitUntil(Promise.resolve(collector.edits));
+		} catch (err) {
+			vscode.window.showErrorMessage(`iTagger: tag-on-save error - ${err instanceof Error ? err.message : String(err)}`);
+		}
 	});
 
 	// Fires once the save (including any edits from waitUntil above) has

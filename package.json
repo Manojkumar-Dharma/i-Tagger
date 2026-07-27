@@ -2,7 +2,7 @@
   "name": "itagger",
   "displayName": "iTagger",
   "description": "Add a source modification tag to selected lines in RPGLE, CLP/CLLE, and SQL source files at a fixed column, using the right comment style for each (//, /* */, --).",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "Manojkumar-IBMi",
   "icon": "icon.png",
   "license": "MIT",
