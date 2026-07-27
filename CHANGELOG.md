@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.3.2
+
+- Fixed: the last line of a multi-line paste wasn't getting tagged (it was being treated the same as the fresh empty line left after a plain Enter keypress, which is correctly skipped - but a paste's last line usually has real content, not an empty cursor position). It would only catch up later if some other edit happened to touch it, which looked like a delay. Now tagged immediately, same as every other line in the paste. A bare Enter keypress's genuinely-empty new line is still correctly left alone.
+
 ## 0.3.1
 
 - Diagnostic build: any error while applying a tag (auto-tag on Enter/paste, or tag on save) now shows as a visible error notification instead of silently disappearing as an unhandled promise rejection. If auto-tag isn't tagging lines even though the status bar shows ON, this should reveal why.

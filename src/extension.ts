@@ -444,8 +444,12 @@ function registerAutoTag(context: vscode.ExtensionContext): vscode.Disposable[] 
 			// after it - whether that's a single Enter keypress or a multi-line
 			// paste. change.text.split on any newline gives one fragment per
 			// resulting line; every fragment boundary except the last one marks a
-			// newly completed line (the last fragment is still being edited, same
-			// as the fresh empty line after a plain Enter, so it's left alone).
+			// newly completed line. The last fragment is different: for a bare
+			// Enter keypress it's the fresh empty line the cursor now sits on
+			// (correctly left alone - nothing to tag yet), but for a paste it
+			// usually holds real content (the paste didn't end with a trailing
+			// newline), which should be tagged too rather than left waiting for
+			// some later edit to happen to touch that line.
 			const completedLines = new Set<number>();
 			for (const change of event.contentChanges) {
 				const fragments = change.text.split(/\r\n|\r|\n/);
@@ -454,6 +458,13 @@ function registerAutoTag(context: vscode.ExtensionContext): vscode.Disposable[] 
 					const lineNum = change.range.start.line + i;
 					if (lineNum < document.lineCount) {
 						completedLines.add(lineNum);
+					}
+				}
+				const lastFragment = fragments[fragments.length - 1];
+				if (newlineCount > 0 && lastFragment.length > 0) {
+					const lastLineNum = change.range.start.line + newlineCount;
+					if (lastLineNum < document.lineCount) {
+						completedLines.add(lastLineNum);
 					}
 				}
 			}
