@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.4.0
+
+- New setting: `itagger.tagBlankLines` (default `false`). When enabled, auto-tag (both on Enter/paste and on save) also tags blank lines, instead of skipping them - works the same whether the blank line came from typing Enter or from a multi-line paste. The manual **Add Source Tag** command already tagged blank lines in the selection regardless of this setting, so it's unaffected.
+
 ## 0.3.2
 
 - Fixed: the last line of a multi-line paste wasn't getting tagged (it was being treated the same as the fresh empty line left after a plain Enter keypress, which is correctly skipped - but a paste's last line usually has real content, not an empty cursor position). It would only catch up later if some other edit happened to touch it, which looked like a delay. Now tagged immediately, same as every other line in the paste. A bare Enter keypress's genuinely-empty new line is still correctly left alone.

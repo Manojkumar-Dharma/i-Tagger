@@ -44,7 +44,7 @@ Notes:
 - For CL/CLLE/CLP, both modes wait until a `+`/`-` continued statement is fully complete before tagging it as one unit, same as the manual command.
 - **Tag on save** detects changes by comparing file content, not by tracking individual edits - so it stays correct even after several edits, insertions, or deletions between saves.
 - The manual **iTagger: Add Source Tag** command (select lines, run it) works exactly the same whether automatic tagging is on or off for that file - they're independent, and never interfere with each other's edits.
-- Blank lines and lines that already carry the current tag are skipped.
+- Blank lines are skipped by default (set `itagger.tagBlankLines` to tag them too); lines that already carry the current tag are always skipped.
 - Settings (including which mode) are remembered per file, per workspace. Reopening a file (or reloading the window) that previously had tagging on will ask - via a notification - whether to turn it back on; it never restores silently.
 
 ## Remembered tag
@@ -57,6 +57,7 @@ The tag prompt (manual command and auto-tag) pre-fills with whatever tag you las
 |---|---|---|
 | `itagger.maxLineLength` | `100` | Total usable line length. |
 | `itagger.tagColumn` | `90` | 1-indexed column where the tag starts when there's room. |
+| `itagger.tagBlankLines` | `false` | Whether auto-tag (Enter/paste and save) also tags blank lines. The manual command always tags blank lines in the selection regardless. |
 
 ## Known limitations
 

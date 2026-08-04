@@ -2,7 +2,7 @@
   "name": "itagger",
   "displayName": "iTagger",
   "description": "Add a source modification tag to selected lines in RPGLE, CLP/CLLE, and SQL source files at a fixed column, using the right comment style for each (//, /* */, --).",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "publisher": "Manojkumar-IBMi",
   "icon": "icon.png",
   "license": "MIT",
@@ -56,6 +56,11 @@
           "type": "number",
           "default": 90,
           "description": "1-indexed column where the tag should start when there's room."
+        },
+        "itagger.tagBlankLines": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether auto-tag (on Enter/paste, and on save) also tags blank lines. The manual Add Source Tag command always tags blank lines in the selection regardless of this setting."
         }
       }
     }

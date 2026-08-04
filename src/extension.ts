@@ -231,14 +231,15 @@ async function runProgrammaticEdit(editor: vscode.TextEditor, run: (editBuilder:
  * statement end).
  */
 function resolveTagTargets(document: vscode.TextDocument, candidateLines: number[]): Map<number, { start: number; end: number }> {
+	const tagBlankLines = vscode.workspace.getConfiguration('itagger', document).get<boolean>('tagBlankLines', false);
 	const targets = new Map<number, { start: number; end: number }>();
 	for (const lineNum of candidateLines) {
 		if (lineNum < 0 || lineNum >= document.lineCount) {
 			continue;
 		}
 		const lineText = document.lineAt(lineNum).text.replace(/\s+$/, '');
-		if (lineText.length === 0) {
-			continue; // blank line - nothing to tag
+		if (lineText.length === 0 && !tagBlankLines) {
+			continue; // blank line, and blank-line tagging is off - nothing to tag
 		}
 
 		if (isClSource(document)) {
